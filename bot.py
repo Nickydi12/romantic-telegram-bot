@@ -1,73 +1,72 @@
 import datetime
 import logging
 import asyncio
+import pytz
 from aiogram import Bot
-from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 
-# --- НАСТРОЙКИ ---
-TOKEN = '8069252349:AAEGXgG0KH9Ybzq6A34DX91MaHNIcMm7_y0'        # вставь сюда токен бота
-USER_ID = 661326630             # твой Telegram ID (получишь тестовое сообщение)
-GIRLFRIEND_ID = 1175351775        # ID девушки (получит основное сообщение в 9:00)
+# === НАСТРОЙКИ ===
+TOKEN = "8069252349:AAEGXgG0KH9Ybzq6A34DX91MaHNIcMm7_y0"
+MY_ID = 661326630         # ← Твой Telegram ID
+HER_ID = 1175351775       # ← ID девушки
 PHRASES_FILE = "phrases.txt"
 PHOTOS_FOLDER = "photos"
 
-# --- ЛОГИ ---
+# === ЛОГИ ===
 logging.basicConfig(level=logging.INFO)
 
-# --- ИНИЦИАЛИЗАЦИЯ ---
+# === ИНИЦИАЛИЗАЦИЯ БОТА ===
 bot = Bot(
     token=TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
-scheduler = AsyncIOScheduler()
 
-# --- Функция отправки сообщения ---
-async def send_message(chat_id, day_number):
+# === ОТПРАВКА СООБЩЕНИЯ ===
+async def send_message(chat_id):
+    day_number = datetime.datetime.now().timetuple().tm_yday
+    logging.info(f"День #{day_number} - отправка в chat_id: {chat_id}")
+
     try:
-        with open(PHRASES_FILE, encoding='utf-8') as f:
+        with open(PHRASES_FILE, "r", encoding="utf-8") as f:
             phrases = f.readlines()
+
         if day_number > len(phrases):
-            logging.warning("Фраз больше нет!")
+            await bot.send_message(chat_id, "Фразы закончились 😢")
             return
+
         phrase = phrases[day_number - 1].strip()
         photo_path = f"{PHOTOS_FOLDER}/{day_number}.jpg"
+
         photo = FSInputFile(photo_path)
         await bot.send_photo(chat_id=chat_id, photo=photo, caption=phrase)
+
         logging.info(f"Отправлено в chat_id {chat_id}")
     except Exception as e:
-        logging.error(f"Ошибка при отправке в chat_id {chat_id}: {e}")
+        logging.error(f"Ошибка при отправке: {e}")
 
-# --- Отправка тестового сообщения только тебе ---
-async def send_test_message():
+# === ПЛАНИРОВЩИК ===
+scheduler = BackgroundScheduler(timezone=pytz.timezone("Europe/Moscow"))
+
+# Тебе в 8:45
+scheduler.add_job(lambda: asyncio.run(send_message(MY_ID)), "cron", hour=8, minute=45)
+
+# Девушке в 9:00
+scheduler.add_job(lambda: asyncio.run(send_message(HER_ID)), "cron", hour=9, minute=0)
+
+scheduler.start()
+
+# === ЗАПУСК ===
+if __name__ == "__main__":
+    # Тестовое сообщение тебе при старте
+    asyncio.run(send_message(MY_ID))
+    logging.info("Бот запущен")
+
     try:
-        await bot.send_message(chat_id=USER_ID, text="Бот успешно запущен и готов к работе!")
-        logging.info("Тестовое сообщение отправлено тебе.")
-    except Exception as e:
-        logging.error(f"Ошибка при отправке тестового сообщения: {e}")
-
-# --- Задачи по расписанию ---
-async def job_send_to_me():
-    day_number = datetime.datetime.now().timetuple().tm_yday
-    logging.info(f"День #{day_number} - отправка предварительного сообщения тебе")
-    await send_message(USER_ID, day_number)
-
-async def job_send_to_girlfriend():
-    day_number = datetime.datetime.now().timetuple().tm_yday
-    logging.info(f"День #{day_number} - отправка сообщения девушке")
-    await send_message(GIRLFRIEND_ID, day_number)
-
-# --- Главный блок запуска ---
-if __name__ == '__main__':
-    async def main():
-        await send_test_message()  # тестовое сообщение при старте (только тебе)
-        scheduler.add_job(job_send_to_me, 'cron', hour=8, minute=45)
-        scheduler.add_job(job_send_to_girlfriend, 'cron', hour=9, minute=0)
-        scheduler.start()
-        logging.info("Бот запущен, ждёт времени отправки...")
         while True:
-            await asyncio.sleep(3600)
-
-    asyncio.run(main())
+            pass  # Не даём скрипту завершиться
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown()
+        logging.info("Бот остановлен")
