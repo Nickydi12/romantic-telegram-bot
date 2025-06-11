@@ -7,6 +7,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile
 from apscheduler.schedulers.background import BackgroundScheduler
+from aiohttp import web
 
 # === НАСТРОЙКИ ===
 TOKEN = "8069252349:AAEGXgG0KH9Ybzq6A34DX91MaHNIcMm7_y0"
@@ -58,15 +59,31 @@ scheduler.add_job(lambda: asyncio.run(send_message(HER_ID)), "cron", hour=9, min
 
 scheduler.start()
 
-# === ЗАПУСК ===
-if __name__ == "__main__":
-    # Тестовое сообщение тебе при старте
-    asyncio.run(send_message(MY_ID))
-    logging.info("Бот запущен")
+# === aiohttp сервер для Render ===
+async def handle(request):
+    return web.Response(text="Bot is running")
 
+async def run_web():
+    app = web.Application()
+    app.add_routes([web.get('/', handle)])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', 8080)
+    await site.start()
+
+# === Главная асинхронная функция запуска ===
+async def main():
+    await run_web()
+    # Отправляем тестовое сообщение себе при старте
+    await send_message(MY_ID)
+    logging.info("Бот запущен")
+    # Просто держим процесс живым
     try:
         while True:
-            pass  # Не даём скрипту завершиться
+            await asyncio.sleep(3600)
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()
         logging.info("Бот остановлен")
+
+if __name__ == "__main__":
+    asyncio.run(main())
