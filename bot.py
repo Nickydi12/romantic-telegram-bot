@@ -57,8 +57,6 @@ scheduler.add_job(lambda: asyncio.run(send_message(MY_ID)), "cron", hour=8, minu
 # Девушке в 9:00
 scheduler.add_job(lambda: asyncio.run(send_message(HER_ID)), "cron", hour=9, minute=0)
 
-scheduler.start()
-
 # === aiohttp сервер для Render ===
 async def handle(request):
     return web.Response(text="Bot is running")
@@ -68,16 +66,16 @@ async def run_web():
     app.add_routes([web.get('/', handle)])
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 8080)
+    site = web.TCPSite(runner, '0.0.0.0', port=8080)
     await site.start()
 
 # === Главная асинхронная функция запуска ===
 async def main():
     await run_web()
-    # Отправляем тестовое сообщение себе при старте
-    await send_message(MY_ID)
+    scheduler.start()  # Запускаем планировщик тут
+    await send_message(MY_ID)  # Тестовое сообщение при старте
     logging.info("Бот запущен")
-    # Просто держим процесс живым
+
     try:
         while True:
             await asyncio.sleep(3600)
